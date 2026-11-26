@@ -52,7 +52,7 @@ export function warnToast(
   lang: Lang
 ): string {
   const parts = items.map(({ kind, percent }) => {
-    const label = lang === "ko" ? labelOf(kind) : (LABELS_EN[kind] ?? kind);
+    const label = lang === "ko" ? labelOf(kind) : LABELS_EN[kind] ?? kind;
     return `${label} ${Math.round(percent)}%`;
   });
   return lang === "ko"
