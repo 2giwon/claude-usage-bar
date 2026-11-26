@@ -35,4 +35,6 @@ if let index = arguments.firstIndex(of: "--icon"), index + 1 < arguments.count {
     }
     exit(0)
 }
+// 테마 적용은 ~/.claude/claude-usage-bar-theme.json 이 있을 때만 켜진다(없으면 nil, 아무 일도 안 함)
+let themeApplier = ThemeApplier.startIfConfigured()
 ClaudeUsageBarApp.main()
