@@ -1,55 +1,49 @@
 import Foundation
+import UsageBarCore
 
-// 화면에 쓰는 한국어 문구
+// 화면에 쓰는 문구. 맥의 선호 언어 1순위를 보고 한국어 또는 영어를 고른다.
+// 문구 자체는 UsageBarCore 의 Strings 에 있고, 여기서는 시각과 숫자를 언어에 맞게 글자로 바꾼다
 enum Words {
-    private static let clock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ko_KR")
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    private static let dayClock: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ko_KR")
-        formatter.dateFormat = "d일 (E) HH:mm"
-        return formatter
-    }()
+    // 확인용 그림(--render)에서 두 언어를 번갈아 그리려고 바꿀 수 있게 둔다
+    static var strings = Strings(language(preferred: Locale.preferredLanguages))
 
     static func percent(_ value: Double) -> String {
         "\(Int(value.rounded()))%"
     }
 
+    // 5시간 창: "13:20 초기화" / "Resets 1:20 PM"
     static func resetClock(_ date: Date) -> String {
-        "\(clock.string(from: date)) 초기화"
+        strings.resets(formatter(korean: "HH:mm", english: "h:mm a").string(from: date))
     }
 
+    // 주간 창: "29일 (일) 15:00 초기화" / "Resets Sun 29, 3:00 PM"
     static func resetDay(_ date: Date) -> String {
-        "\(dayClock.string(from: date)) 초기화"
+        strings.resets(formatter(korean: "d일 (E) HH:mm", english: "EEE d, h:mm a").string(from: date))
     }
 
-    // "4시간 33분 남음", "3일 6시간 남음", "12분 남음"
     static func remaining(until date: Date, now: Date) -> String {
-        let minutes = max(0, Int(date.timeIntervalSince(now) / 60))
-        let days = minutes / (24 * 60)
-        let hours = (minutes % (24 * 60)) / 60
-        let mins = minutes % 60
-        if days > 0 { return "\(days)일 \(hours)시간 남음" }
-        if hours > 0 { return "\(hours)시간 \(mins)분 남음" }
-        return "\(mins)분 남음"
+        strings.remaining(minutes: Int(date.timeIntervalSince(now) / 60))
     }
 
-    // "방금 갱신", "2분 전 갱신", "3시간 전 갱신"
-    static func updated(_ date: Date, now: Date) -> String {
-        let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
-        if minutes < 1 { return "방금 갱신" }
-        if minutes < 60 { return "\(minutes)분 전 갱신" }
-        return "\(minutes / 60)시간 전 갱신"
+    static func updated(_ date: Date, now: Date, isStale: Bool) -> String {
+        strings.updated(minutesAgo: Int(now.timeIntervalSince(date) / 60), isStale: isStale)
     }
 
-    // "1M 중 198K"
+    // "1M 중 198K" / "198K of 1M"
     static func tokens(_ used: Int, of window: Int) -> String {
-        "\(short(window)) 중 \(short(used))"
+        strings.tokens(used: short(used), of: short(window))
+    }
+
+    private static func formatter(korean: String, english: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        if strings.language == .korean {
+            formatter.locale = Locale(identifier: "ko_KR")
+            formatter.dateFormat = korean
+        } else {
+            formatter.locale = Locale(identifier: "en_US")
+            formatter.dateFormat = english
+        }
+        return formatter
     }
 
     private static func short(_ value: Int) -> String {

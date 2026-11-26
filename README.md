@@ -12,7 +12,7 @@ An open source macOS menu bar app that shows your Claude plan usage as rings and
 
 A ring for your 5-hour usage sits in the menu bar. Click it to open cards for your 5-hour usage, your weekly usage, and the current session's context window.
 
-> The app's UI is in Korean.
+The app follows your Mac's language: Korean if Korean is your first preferred language, English otherwise.
 
 ## Screenshots
 
@@ -21,7 +21,7 @@ A ring for your 5-hour usage sits in the menu bar. Click it to open cards for yo
 | <img src="docs/images/menubar-dark.png" height="28" alt="Menu bar ring, normal"> | <img src="docs/images/menubar-warning-dark.png" height="28" alt="Menu bar ring, warning"> |
 
 <p align="center">
-  <img src="docs/images/popover.png" width="386" alt="Panel: 5-hour usage ring, weekly usage bar with pace marker, current session context">
+  <img src="docs/images/popover-en.png" width="340" alt="Panel: 5-hour usage ring, weekly usage bar with pace marker, current session context">
 </p>
 
 - **Menu bar:** a ring and the percentage for your 5-hour usage. Green below 80%, orange from 80%. A dashed gray ring means there is no value yet, and the ring dims when nothing has updated for 30 minutes.
@@ -36,7 +36,7 @@ A ring for your 5-hour usage sits in the menu bar. Click it to open cards for yo
 This repository has two parts that work together. **Install both to see values.**
 
 - **The menu bar app (`menubar/`, SwiftUI):** reads the usage file and draws it.
-- **The mod `usage-bar-for-claude` (a Claude Code plugin):** whenever Claude Code reports new usage, it writes the 5-hour and weekly usage, their reset times, and the current session's context use to `~/.claude/claude-usage-bar.json`. It also shows a toast inside Claude Code the first time a window crosses 80%.
+- **The mod `usage-bar-for-claude` (a Claude Code plugin):** whenever Claude Code reports new usage, it writes the 5-hour and weekly usage, their reset times, and the current session's context use to `~/.claude/claude-usage-bar.json`. It also shows a toast inside Claude Code the first time a window crosses 80%, in Korean or English to match your locale.
 
 ## Requirements
 

@@ -144,9 +144,9 @@ struct PopoverView: View {
             switch store.load {
             case .missing:
                 FiveHourCard(view: nil, now: store.now, isDim: true)
-                notice(icon: "hourglass", text: "Claude Code에서 응답을 한 번 받으면 표시돼요")
+                notice(icon: "hourglass", text: Words.strings.emptyNotice)
             case .failed:
-                notice(icon: "exclamationmark.triangle", text: "사용량 파일을 읽지 못했어요")
+                notice(icon: "exclamationmark.triangle", text: Words.strings.failedNotice)
             case let .loaded(snapshot):
                 loaded(snapshot)
             }
@@ -163,7 +163,7 @@ struct PopoverView: View {
         let week = snapshot.limits.first { $0.kind == "seven_day" }
 
         if five == nil, week == nil {
-            notice(icon: "person.crop.circle.badge.questionmark", text: "구독 요금제 사용량이 없어요")
+            notice(icon: "person.crop.circle.badge.questionmark", text: Words.strings.noPlanNotice)
         } else {
             if let five {
                 FiveHourCard(view: windowView(five, now: store.now), now: store.now, isDim: isDim)
@@ -179,7 +179,7 @@ struct PopoverView: View {
 
     private var header: some View {
         HStack {
-            Text("Claude 사용량").font(.system(size: 15, weight: .semibold))
+            Text(Words.strings.title).font(.system(size: 15, weight: .semibold))
             Spacer()
             HStack(spacing: 6) {
                 Circle().fill(liveColor).frame(width: 7, height: 7)
@@ -196,11 +196,12 @@ struct PopoverView: View {
     }
 
     private var updatedText: String {
-        guard case let .loaded(snapshot) = store.load else { return "기다리는 중" }
-        let text = Words.updated(snapshot.updatedAt, now: store.now)
-        return isStale(updatedAt: snapshot.updatedAt, now: store.now)
-            ? text.replacingOccurrences(of: "갱신", with: "값이에요")
-            : text
+        guard case let .loaded(snapshot) = store.load else { return Words.strings.waiting }
+        return Words.updated(
+            snapshot.updatedAt,
+            now: store.now,
+            isStale: isStale(updatedAt: snapshot.updatedAt, now: store.now)
+        )
     }
 
     private func notice(icon: String, text: String) -> some View {
@@ -214,16 +215,16 @@ struct PopoverView: View {
 
     private var footer: some View {
         HStack(spacing: 6) {
-            Text("Claude Code 응답 기준").font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(Words.strings.footer).font(.system(size: 11)).foregroundStyle(.secondary)
             Spacer()
             RefreshButton { store.reload(force: true) }
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Label("종료", systemImage: "power")
+                Label(Words.strings.quit, systemImage: "power")
             }
             .buttonStyle(FooterButtonStyle())
-            .help("Claude Usage Bar 종료")
+            .help(Words.strings.quitHelp)
         }
         .padding(.top, 4)
         .overlay(alignment: .top) { Divider().offset(y: -6) }
@@ -252,11 +253,11 @@ struct RefreshButton: View {
             HStack(spacing: 4) {
                 Image(systemName: state.isDone ? "checkmark" : "arrow.clockwise")
                     .rotationEffect(.degrees(state.turns * 360))
-                Text(state.isDone ? "다시 읽었어요" : "새로 읽기")
+                Text(state.isDone ? Words.strings.refreshed : Words.strings.refresh)
             }
         }
         .buttonStyle(FooterButtonStyle())
-        .help("사용량 파일 다시 읽기")
+        .help(Words.strings.refreshHelp)
     }
 }
 
@@ -309,16 +310,16 @@ struct FiveHourCard: View {
                 .opacity(isDim ? 0.55 : 1)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("5시간 사용량").font(.system(size: 14, weight: .semibold))
+                    Text(Words.strings.fiveHourTitle).font(.system(size: 14, weight: .semibold))
                     if let view, view.isReset {
-                        caption("arrow.counterclockwise", "초기화됨, 다음 응답 때 갱신")
+                        caption("arrow.counterclockwise", Words.strings.resetDone)
                     } else if let reset = view?.resetsAt {
                         caption("clock", Words.resetClock(reset))
                         Bar(percent: elapsedPercent(until: reset), color: Color.secondary.opacity(0.6), height: 6)
                         Text(Words.remaining(until: reset, now: now))
                             .font(.system(size: 12)).foregroundStyle(.secondary)
                     } else if view == nil {
-                        caption("hourglass", "다음 응답 때 표시")
+                        caption("hourglass", Words.strings.showAfterResponse)
                     }
                 }
             }
@@ -345,7 +346,7 @@ struct WeeklyCard: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("주간 사용량").font(.system(size: 14, weight: .semibold))
+                    Text(Words.strings.weeklyTitle).font(.system(size: 14, weight: .semibold))
                     Spacer()
                     Text(Words.percent(view.percent))
                         .font(.system(size: 18, weight: .semibold))
@@ -354,7 +355,7 @@ struct WeeklyCard: View {
                 Bar(percent: view.percent, color: barColor, marker: baseline)
                     .opacity(isDim ? 0.55 : 1)
                 if view.isReset {
-                    caption("arrow.counterclockwise", "초기화됨, 다음 응답 때 갱신")
+                    caption("arrow.counterclockwise", Words.strings.resetDone)
                 } else if let reset = view.resetsAt {
                     HStack {
                         Text(Words.resetDay(reset))
@@ -382,9 +383,7 @@ struct WeeklyCard: View {
 
     private func paceBadge(baseline: Double) -> some View {
         let isFast = pace(used: view.percent, baseline: baseline) == .fast
-        let text = isFast
-            ? "이 속도면 초기화 전에 다 써요 (기준선 \(Words.percent(baseline)))"
-            : "지금 속도면 여유 있어요 (기준선 \(Words.percent(baseline)))"
+        let text = Words.strings.pace(isFast: isFast, baseline: Words.percent(baseline))
         let color = isFast ? Palette.warning : Palette.normal
         return HStack(spacing: 4) {
             Image(systemName: isFast ? "chart.line.uptrend.xyaxis" : "chart.line.downtrend.xyaxis")
@@ -407,7 +406,7 @@ struct ContextCard: View {
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("지금 세션 컨텍스트").font(.system(size: 14, weight: .semibold))
+                    Text(Words.strings.contextTitle).font(.system(size: 14, weight: .semibold))
                     Spacer()
                     Text(Words.percent(percent))
                         .font(.system(size: 14, weight: .semibold))
@@ -421,7 +420,7 @@ struct ContextCard: View {
 
     private var detail: String {
         let tokens = context.tokens.map { Words.tokens($0, of: context.window) }
-        return [session.map { "\($0) 세션" }, tokens].compactMap { $0 }.joined(separator: ", ")
+        return [session.map { Words.strings.session($0) }, tokens].compactMap { $0 }.joined(separator: ", ")
     }
 }
 

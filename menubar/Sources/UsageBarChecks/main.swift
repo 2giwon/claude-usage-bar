@@ -71,5 +71,45 @@ check("5. 29분 지난 값은 아직 새 값", !isStale(updatedAt: updated, now:
 check("6. 80% 이상이면 경고", level(percent: 80) == .warning && level(percent: 95) == .warning)
 check("6. 80% 미만이면 평소", level(percent: 79.9) == .normal && level(percent: 8) == .normal)
 
+// 7. 언어 고르기: 맥 선호 언어 1순위를 본다
+check("7. ko-KR 이면 한국어", language(preferred: ["ko-KR", "en-US"]) == .korean)
+check("7. ko 만 있어도 한국어", language(preferred: ["ko"]) == .korean)
+check("7. en-US 면 영어", language(preferred: ["en-US", "ko-KR"]) == .english)
+check("7. ja-JP 면 영어", language(preferred: ["ja-JP"]) == .english)
+check("7. 비어 있으면 영어", language(preferred: []) == .english)
+
+let ko = Strings(.korean)
+let en = Strings(.english)
+
+// 8. 남은 시간
+check("8. 한국어 3시간 39분 남음", ko.remaining(minutes: 3 * 60 + 39) == "3시간 39분 남음")
+check("8. 영어 3h 39m left", en.remaining(minutes: 3 * 60 + 39) == "3h 39m left")
+check("8. 한국어 3일 5시간 남음", ko.remaining(minutes: (3 * 24 + 5) * 60 + 10) == "3일 5시간 남음")
+check("8. 영어 3d 5h left", en.remaining(minutes: (3 * 24 + 5) * 60 + 10) == "3d 5h left")
+check("8. 1시간 안이면 분만", ko.remaining(minutes: 12) == "12분 남음" && en.remaining(minutes: 12) == "12m left")
+
+// 9. 갱신 시각
+check("9. 한국어 방금 갱신", ko.updated(minutesAgo: 0, isStale: false) == "방금 갱신")
+check("9. 한국어 2분 전 갱신", ko.updated(minutesAgo: 2, isStale: false) == "2분 전 갱신")
+check("9. 한국어 오래된 값", ko.updated(minutesAgo: 35, isStale: true) == "35분 전 값이에요")
+check("9. 영어 Just updated", en.updated(minutesAgo: 0, isStale: false) == "Just updated")
+check("9. 영어 Updated 2m ago", en.updated(minutesAgo: 2, isStale: false) == "Updated 2m ago")
+check("9. 영어 오래된 값", en.updated(minutesAgo: 35, isStale: true) == "From 35m ago")
+check("9. 한 시간 넘으면 시간 단위",
+      ko.updated(minutesAgo: 130, isStale: true) == "2시간 전 값이에요"
+          && en.updated(minutesAgo: 130, isStale: true) == "From 2h ago")
+
+// 10. 번역 누락 없음
+check("10. 한국어 문구가 모두 채워져 있다", ko.all.allSatisfy { !$0.isEmpty })
+check("10. 영어 문구가 모두 채워져 있다", en.all.allSatisfy { !$0.isEmpty })
+check("10. 영어 문구에 한국어가 섞이지 않는다",
+      en.all.allSatisfy { $0.range(of: "\\p{Hangul}", options: .regularExpression) == nil })
+check("10. 문장형 문구도 두 언어 다 채워져 있다",
+      [ko, en].allSatisfy {
+          !$0.resets("13:20").isEmpty && !$0.pace(isFast: true, baseline: "54%").isEmpty
+              && !$0.pace(isFast: false, baseline: "54%").isEmpty && !$0.session("x").isEmpty
+              && !$0.tokens(used: "198K", of: "1M").isEmpty
+      })
+
 print(failures == 0 ? "all checks passed" : "\(failures) check(s) failed")
 exit(failures == 0 ? 0 : 1)

@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from "claude-code";
 
-import { labelOf, overWarn } from "./format";
-import type { RateLimit, UsageState } from "./format";
+import { langFromLocale, overWarn, warnToast } from "./format";
+import type { Lang, RateLimit, UsageState } from "./format";
 import {
   buildSnapshot,
   homeFromPath,
@@ -21,6 +21,8 @@ let warned = new Set<string>();
 let hasSeenLimits = false;
 // 마지막으로 받은 컨텍스트 사용량. 메뉴 막대 앱의 "지금 세션 컨텍스트" 카드에 쓴다
 let context: SnapshotContext | undefined;
+// 알림 언어. 세션을 열 때 LC_ALL, LANG 환경 변수를 보고 정한다. 한국어가 아니면 영어
+let lang: Lang = "en";
 // 임시 파일 이름이 세션끼리, 같은 세션의 연달은 쓰기끼리 겹치지 않게 붙이는 값
 const writerId = Math.random().toString(36).slice(2, 10);
 let writeCount = 0;
@@ -67,11 +69,11 @@ function apply(
   // 두 창이 한꺼번에 80%를 넘으면 알림 하나로 묶는다. 따로 띄우면 뒤 알림이 앞 알림을 덮는다
   const fresh = over.filter((kind) => !warned.has(kind));
   if (!isQuiet && fresh.length > 0) {
-    const parts = fresh.map((kind) => {
-      const limit = limits.find((item) => item.kind === kind);
-      return `${labelOf(kind)} ${Math.round(limit?.percentUsed ?? 0)}%`;
-    });
-    $.ui.toast(`⚠️ Claude 사용량 ${parts.join(", ")}`);
+    const items = fresh.map((kind) => ({
+      kind,
+      percent: limits.find((item) => item.kind === kind)?.percentUsed ?? 0,
+    }));
+    $.ui.toast(warnToast(items, lang));
   }
   warned = new Set(over);
 }
@@ -92,6 +94,22 @@ export const register: Register = (on) => {
     // 예전 버전(0.1.0 첫 버전)이 입력창 아래에 걸어 둔 사용량 문구를 지운다.
     // 상태 표시줄은 다음 호출이 바꿀 때까지 남아 있어서, 지우지 않으면 reload 뒤에도 보인다
     $.ui.status(undefined);
+
+    // 데스크톱 앱이 연 세션에는 LANG 이 비어 있을 수 있어서, 비어 있으면 맥의 지역 설정(예: ko_KR)을 읽는다.
+    // C, POSIX 처럼 언어가 없는 값도 비어 있는 것으로 본다
+    try {
+      let locale = (await $.env.get("LC_ALL")) || (await $.env.get("LANG"));
+      if (!locale || /^(C|POSIX)([._]|$)/.test(locale)) {
+        const read = await $.process.run(
+          ["/usr/bin/defaults", "read", "-g", "AppleLocale"],
+          { timeoutMs: 3000 }
+        );
+        locale = read.exitCode === 0 ? read.stdout.trim() : undefined;
+      }
+      lang = langFromLocale(locale);
+    } catch {
+      lang = "en";
+    }
 
     try {
       const usage = await $.session.usage();

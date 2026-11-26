@@ -2,20 +2,25 @@ import AppKit
 import SwiftUI
 import UsageBarCore
 
-// 확인용: 상태별 펼침 화면과 메뉴 막대 아이콘을 PNG 로 저장한다
+// 확인용: 상태별 펼침 화면과 메뉴 막대 아이콘을 한국어(ko), 영어(en)로 PNG 저장한다
 @MainActor
 enum Preview {
     static func renderAll(to folder: URL) {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let now = ISO8601DateFormatter().date(from: "2026-11-26T00:16:00Z")!
+        let original = Words.strings
 
-        for scheme in [ColorScheme.light, .dark] {
-            let suffix = scheme == .dark ? "dark" : "light"
-            for (name, store) in samples(now: now) {
-                save(PopoverView(store: store), scheme: scheme, to: folder.appendingPathComponent("popover-\(name)-\(suffix).png"))
-                save(MenuBarLabel(store: store).padding(6), scheme: scheme, to: folder.appendingPathComponent("menubar-\(name)-\(suffix).png"))
+        for (code, lang) in [("ko", Language.korean), ("en", Language.english)] {
+            Words.strings = Strings(lang)
+            for scheme in [ColorScheme.light, .dark] {
+                let suffix = "\(code)-\(scheme == .dark ? "dark" : "light")"
+                for (name, store) in samples(now: now) {
+                    save(PopoverView(store: store), scheme: scheme, to: folder.appendingPathComponent("popover-\(name)-\(suffix).png"))
+                    save(MenuBarLabel(store: store).padding(6), scheme: scheme, to: folder.appendingPathComponent("menubar-\(name)-\(suffix).png"))
+                }
             }
         }
+        Words.strings = original
         print("rendered to \(folder.path)")
     }
 
