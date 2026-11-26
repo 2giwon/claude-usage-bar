@@ -1,0 +1,9 @@
+{
+  "name": "usage-bar-for-claude",
+  "version": "0.1.0",
+  "description": "Writes Claude plan usage (5-hour and weekly) to a file that the Claude Usage Bar macOS menu bar app shows as rings and bars.",
+  "author": { "name": "2giwon", "url": "https://github.com/2giwon" },
+  "homepage": "https://github.com/2giwon/claude-usage-bar",
+  "license": "MIT",
+  "keywords": ["usage", "rate-limit", "menu-bar", "macos"]
+}

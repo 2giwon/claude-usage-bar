@@ -1,0 +1,6 @@
+{
+  "name": "usage-bar-for-claude",
+  "description": "Claude Usage Bar: Claude plan usage (5-hour and weekly) in the macOS menu bar.",
+  "owner": { "name": "2giwon", "url": "https://github.com/2giwon" },
+  "plugins": [{ "name": "usage-bar-for-claude", "source": "./" }]
+}
