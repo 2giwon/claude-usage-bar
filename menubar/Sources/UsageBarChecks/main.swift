@@ -409,13 +409,25 @@ check("S8. 보관된 세션은 빠진다",
       board([status("c1", .working, minutesAgo: 1)], [appSession("a1", cli: ["c1"], archived: true)]).isEmpty)
 check("S8. 짝이 없는 세션은 빠진다(앱 세션 폴더는 읽었을 때)",
       board([status("zz", .working, minutesAgo: 1)], sessionsC1).isEmpty)
+// (끝남은 S13 의 2시간 기준이 먼저 걸리므로, 24시간 기준은 답 기다림 세션으로 시험한다)
+let blockedC1 = [appSession("a1", cli: ["c1"], category: "blocked")]
 check("S8. 24시간 넘게 쉰 세션은 빠지고, 23시간은 남는다",
-      board([status("c1", .idle, minutesAgo: 24 * 60 + 1)], sessionsC1).isEmpty
-          && board([status("c1", .idle, minutesAgo: 23 * 60)], sessionsC1).count == 1)
+      board([status("c1", .idle, minutesAgo: 24 * 60 + 1)], blockedC1).isEmpty
+          && board([status("c1", .idle, minutesAgo: 23 * 60)], blockedC1).count == 1)
 
 check("S8. 한 세션의 최신 상태가 24시간 넘게 쉬었으면, 더 오래된 다른 번호의 상태가 살아나지 않는다(codex P2)",
       board([status("c-new", .idle, minutesAgo: 25 * 60), status("c-old", .waiting, minutesAgo: 26 * 60)],
             [appSession("a1", cli: ["c-new", "c-old"])]).isEmpty)
+
+// S13. 끝난 세션은 2시간 지나면 빠진다(다음 세션으로 넘어간 이전 세션이 방에 남지 않게, 11-27 사용자 결정)
+check("S13. 끝남 2시간 1분이면 빠지고, 1시간 59분이면 남는다",
+      board([status("c1", .idle, minutesAgo: 121)], sessionsC1).isEmpty
+          && board([status("c1", .idle, minutesAgo: 119)], sessionsC1).count == 1)
+check("S13. 답 기다림(앱 요약 blocked)과 확인 필요는 3시간이 지나도 남는다",
+      board([status("c1", .idle, minutesAgo: 180)], [appSession("a1", cli: ["c1"], category: "blocked")]).first?.kind == .waiting
+          && board([status("c1", .idle, minutesAgo: 180)], [appSession("a1", cli: ["c1"], category: "review_ready")]).first?.kind == .review)
+check("S13. 30분 넘게 멈춰 끝남이 된 세션도 마지막 신호에서 2시간 지나면 빠진다",
+      board([status("c1", .working, minutesAgo: 125)], sessionsC1).isEmpty)
 
 // S9. 순서
 let ordered = board(

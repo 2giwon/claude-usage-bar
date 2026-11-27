@@ -298,6 +298,7 @@ public func activityFor(tool: String?) -> String? {
 public let abandonedWorkSeconds: TimeInterval = 30 * 60
 
 public let boardIdleLimit: TimeInterval = 24 * 60 * 60
+public let boardDoneLimit: TimeInterval = 2 * 60 * 60
 
 private func folderName(_ path: String?) -> String {
     guard let path, !path.isEmpty else { return "?" }
@@ -368,6 +369,10 @@ public func buildBoard(statuses: [SessionStatus], sessions: [AppSession]?,
                 kind = .done
             }
         }
+
+        // 끝난 세션은 2시간 지나면 뺀다. 다음 세션으로 넘어간 이전 세션이 오래 남지 않게(11-27 사용자 결정).
+        // 답 기다림, 확인 필요는 대답이 필요한 세션이라 24시간 기준(위의 boardIdleLimit)을 그대로 쓴다
+        if kind == .done, now.timeIntervalSince(since) > boardDoneLimit { continue }
 
         let title = session?.title.flatMap { $0.isEmpty ? nil : $0 }
         rows.append(BoardRow(
