@@ -76,6 +76,31 @@ In the desktop app, where `/plugin` does not run: click + next to the prompt box
 
 After installing, run `/reload-plugins` in any session that is already open.
 
+### 3. Session board (optional)
+
+The popover can also list your Claude desktop app (Code tab) sessions: which one is working, which one needs you, which one is done. Click a row to jump to that session in the desktop app. If a session waits for you for more than 10 minutes, you get one macOS notification.
+
+It runs on Claude Code hooks. Add these to `~/.claude/settings.json` (merge them into your existing `"hooks"` if you have any). The path assumes the app is in `/Applications`; change it if you put the app somewhere else.
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "Notification": [{ "matcher": "permission_prompt|elicitation_dialog", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "PostToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }]
+  }
+}
+```
+
+- The `PreToolUse` hook runs before every tool call (about 30 ms each) so each row can say what Claude is doing: reading, editing, running a command, looking things up, delegating or planning. A session with no sign of life for 30 minutes is shown as done.
+- To mirror the list somewhere else (a web page of your own), create `~/.claude/claude-usage-bar-board.json` with `{ "url": "https://…", "key": "…" }`. The app then POSTs `{ "rows": [...] }` there with `Authorization: Bearer <key>` whenever the list changes, and once a minute. Titles go with it, folder paths do not. Without that file nothing is sent anywhere.
+- The hooks write one small file per session to `~/.claude/session-board/`. The Sessions card shows up once that folder exists, so nothing changes if you skip this step.
+- Session titles and the "jump to session" link come from the desktop app's own session files (`~/Library/Application Support/Claude/claude-code-sessions/`) and its `claude://code/continue?session=…` link. **Neither is documented by Anthropic**, so a desktop app update may break them. When the app can't read a title, it shows the folder name and says so.
+- A session in the terminal (not the desktop app) has no desktop session to open, so it is not listed.
+
 ### Build from source
 
 With Swift 5.10 or later (Xcode, or the Command Line Tools: `xcode-select --install`):

@@ -74,6 +74,31 @@ claude plugin install usage-bar-for-claude --marketplace 2giwon/claude-usage-bar
 
 설치한 뒤 열려 있는 세션에서는 `/reload-plugins`를 실행하세요.
 
+### 3. 세션 현황판 (선택)
+
+펼침 화면에 Claude 데스크톱 앱(Code 탭) 세션 목록도 보여 줄 수 있어요. 어느 세션이 일하는 중인지, 답을 기다리는지, 끝났는지 한눈에 보이고, 줄을 누르면 데스크톱 앱에서 그 세션으로 바로 이동해요. 답 기다림이 10분 넘게 이어지면 맥 알림을 한 번 띄워요.
+
+Claude Code 훅으로 동작해요. 아래 설정을 `~/.claude/settings.json`에 넣으세요(이미 `"hooks"`가 있으면 그 안에 합쳐 넣으세요). 경로는 앱을 `응용 프로그램` 폴더(`/Applications`)에 둔 경우예요. 다른 곳에 두었으면 경로를 바꾸세요.
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "Notification": [{ "matcher": "permission_prompt|elicitation_dialog", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }],
+    "PostToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "B=\"/Applications/Claude Usage Bar.app/Contents/MacOS/ClaudeUsageBar\"; [ -x \"$B\" ] && \"$B\" --session-hook || cat > /dev/null; exit 0", "timeout": 5 }] }]
+  }
+}
+```
+
+- `PreToolUse` 훅은 도구를 부를 때마다 돌아요(한 번에 0.03초 정도). 그래서 줄마다 Claude가 지금 하는 일(파일 읽기, 고치기, 명령 실행, 찾아보기, 서브 에이전트에 맡기기, 계획 세우기)을 보여 줘요. 30분 동안 아무 변화가 없는 세션은 끝남으로 보여요.
+- 목록을 다른 곳(직접 만든 웹 화면 등)에도 보내려면 `~/.claude/claude-usage-bar-board.json`에 `{ "url": "https://…", "key": "…" }`를 만드세요. 그러면 앱이 목록이 바뀔 때와 1분마다 `Authorization: Bearer <key>`를 붙여 `{ "rows": [...] }`를 그 주소로 POST해요. 세션 제목은 같이 가고 폴더 경로는 가지 않아요. 이 파일이 없으면 아무 데도 보내지 않아요.
+- 훅은 세션마다 작은 파일 하나를 `~/.claude/session-board/`에 써요. 세션 카드는 이 폴더가 생겨야 보여서, 이 단계를 건너뛰면 화면은 그대로예요.
+- 세션 제목과 "세션으로 이동" 링크는 데스크톱 앱의 세션 파일(`~/Library/Application Support/Claude/claude-code-sessions/`)과 `claude://code/continue?session=…` 링크를 써요. **둘 다 Anthropic이 문서로 밝힌 형식이 아니라서**, 데스크톱 앱이 업데이트되면 동작하지 않을 수 있어요. 제목을 못 읽으면 폴더 이름을 대신 보여 주고 그 사실을 알려요.
+- 터미널에서 연 세션은 데스크톱 앱에 열 세션이 없어서 목록에 나오지 않아요.
+
 ### 소스에서 직접 빌드하기
 
 Swift 5.10 이상(Xcode나 명령줄 도구 `xcode-select --install`)이 있으면 직접 빌드할 수 있어요.

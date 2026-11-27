@@ -84,12 +84,17 @@ struct Card<Content: View>: View {
 // 메뉴 막대에 들어가는 링 아이콘과 숫자
 struct MenuBarLabel: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var sessions: SessionStore
 
     var body: some View {
         HStack(spacing: 4) {
             Image(nsImage: MenuBarIcon.image(percent: menuPercent, isDim: isDim))
             Text(menuText)
                 .monospacedDigit()
+            // 답을 기다리는 세션이 있으면 주황 숫자. 메뉴 막대는 글자 색을 지우므로 그림으로 넣는다
+            if sessions.waitingCount > 0 {
+                Image(nsImage: MenuBarIcon.badge(sessions.waitingCount))
+            }
         }
     }
 
@@ -132,11 +137,31 @@ enum MenuBarIcon {
         image.isTemplate = false
         return image
     }
+
+    // 답 기다리는 세션 수: 주황 동그라미 안의 흰 숫자
+    @MainActor
+    static func badge(_ count: Int) -> NSImage {
+        let text = count > 9 ? "9+" : "\(count)"
+        let badge = Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 15, minHeight: 15)
+            .background(Capsule().fill(Palette.warning))
+            .padding(1)
+        let renderer = ImageRenderer(content: badge)
+        renderer.scale = 2
+        let image = renderer.nsImage ?? NSImage(size: NSSize(width: 17, height: 17))
+        image.isTemplate = false
+        return image
+    }
 }
 
 // 메뉴 막대 아이콘을 누르면 펼쳐지는 화면
 struct PopoverView: View {
     @ObservedObject var store: UsageStore
+    @ObservedObject var sessions: SessionStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -149,6 +174,9 @@ struct PopoverView: View {
                 notice(icon: "exclamationmark.triangle", text: Words.strings.failedNotice)
             case let .loaded(snapshot):
                 loaded(snapshot)
+            }
+            if sessions.load != .hidden {
+                SessionCard(sessions: sessions)
             }
             footer
         }
@@ -217,7 +245,10 @@ struct PopoverView: View {
         HStack(spacing: 6) {
             Text(Words.strings.footer).font(.system(size: 11)).foregroundStyle(.secondary)
             Spacer()
-            RefreshButton { store.reload(force: true) }
+            RefreshButton {
+                store.reload(force: true)
+                sessions.reload()
+            }
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {

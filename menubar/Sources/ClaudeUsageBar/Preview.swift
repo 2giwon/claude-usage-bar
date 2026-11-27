@@ -14,9 +14,17 @@ enum Preview {
             Words.strings = Strings(lang)
             for scheme in [ColorScheme.light, .dark] {
                 let suffix = "\(code)-\(scheme == .dark ? "dark" : "light")"
+                let hidden = SessionStore(load: .hidden, now: now)
                 for (name, store) in samples(now: now) {
-                    save(PopoverView(store: store), scheme: scheme, to: folder.appendingPathComponent("popover-\(name)-\(suffix).png"))
-                    save(MenuBarLabel(store: store).padding(6), scheme: scheme, to: folder.appendingPathComponent("menubar-\(name)-\(suffix).png"))
+                    save(PopoverView(store: store, sessions: hidden), scheme: scheme, to: folder.appendingPathComponent("popover-\(name)-\(suffix).png"))
+                    save(MenuBarLabel(store: store, sessions: hidden).padding(6), scheme: scheme, to: folder.appendingPathComponent("menubar-\(name)-\(suffix).png"))
+                }
+                let usage = samples(now: now)[0].1
+                for (name, sessions) in sessionSamples(now: now) {
+                    save(PopoverView(store: usage, sessions: sessions), scheme: scheme,
+                         to: folder.appendingPathComponent("popover-sessions-\(name)-\(suffix).png"))
+                    save(MenuBarLabel(store: usage, sessions: sessions).padding(6), scheme: scheme,
+                         to: folder.appendingPathComponent("menubar-sessions-\(name)-\(suffix).png"))
                 }
             }
         }
@@ -45,6 +53,27 @@ enum Preview {
             ("stale", UsageStore(load: .loaded(snapshot(five: 8, week: 41, updated: now.addingTimeInterval(-35 * 60))), now: now)),
             ("missing", UsageStore(load: .missing, now: now)),
             ("failed", UsageStore(load: .failed, now: now)),
+        ]
+    }
+
+    static func sessionSamples(now: Date) -> [(String, SessionStore)] {
+        func row(_ id: String, _ title: String, _ kind: BoardKind, _ detail: String?, minutes: Double,
+                 missing: Bool = false) -> BoardRow {
+            BoardRow(localId: "local_\(id)", title: title, isTitleMissing: missing, kind: kind, detail: detail,
+                     since: now.addingTimeInterval(-minutes * 60), link: missing ? nil : sessionLink("local_\(id)"))
+        }
+        let rows = [
+            row("a", "주식 종목 분석", .waiting, "매수 기준을 정해 주세요", minutes: 12),
+            row("b", "랩매니저 프론트", .working, nil, minutes: 3),
+            row("c", "작업노트 작업", .review, "버스 도착 예측값 차이 확인", minutes: 8),
+            row("d", "Android위클리", .done, "#754 글 배포 완료", minutes: 95),
+            row("e", "claude-usage-bar", .working, nil, minutes: 0, missing: true),
+        ]
+        return [
+            ("list", SessionStore(load: .loaded(rows), now: now)),
+            ("loading", SessionStore(load: .loading, now: now)),
+            ("empty", SessionStore(load: .loaded([]), now: now)),
+            ("failed", SessionStore(load: .failed, now: now)),
         ]
     }
 

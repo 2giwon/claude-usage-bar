@@ -94,4 +94,55 @@ public struct Strings {
     public func tokens(used: String, of window: String) -> String {
         pick("\(window) 중 \(used)", "\(used) of \(window)")
     }
+
+    // ===== 세션 현황판 =====
+
+    public var boardTitle: String { pick("세션", "Sessions") }
+    public var boardWaiting: String { pick("답 기다림", "Needs you") }
+    public var boardWorking: String { pick("일하는 중", "Working") }
+    public var boardReview: String { pick("확인 필요", "Review") }
+    public var boardDone: String { pick("끝남", "Done") }
+    public var boardEmpty: String { pick("지금 열린 세션이 없어요", "No open sessions") }
+    public var boardFailed: String { pick("세션 상태를 읽지 못했어요", "Couldn't read session status") }
+    public var boardTitleMissing: String {
+        pick("앱 형식이 바뀌어 제목을 못 읽었어요", "Couldn't read the title, the app's format may have changed")
+    }
+    public var boardOpenFailed: String { pick("세션을 열지 못했어요", "Couldn't open the session") }
+    public var boardOpenHelp: String { pick("눌러서 이 세션 열기", "Open this session") }
+    public var boardAlertTitle: String { pick("답을 기다리는 세션이 있어요", "A session is waiting for you") }
+    public var boardUploadFailed: String { pick("작업노트로 보내지 못했어요", "Couldn't send the list") }
+
+    // 하는 일 한 줄: activityFor(tool:) 의 값
+    public func boardActivity(_ activity: String?) -> String? {
+        switch activity {
+        case "reading": return pick("파일 읽는 중", "Reading files")
+        case "editing": return pick("파일 고치는 중", "Editing files")
+        case "running": return pick("명령 실행 중", "Running a command")
+        case "researching": return pick("찾아보는 중", "Looking things up")
+        case "delegating": return pick("서브 에이전트에 맡기는 중", "Delegating to an agent")
+        case "planning": return pick("계획 세우는 중", "Planning")
+        case "tool": return pick("도구 쓰는 중", "Using a tool")
+        default: return nil
+        }
+    }
+
+    public var boardAll: [String] {
+        ["reading", "editing", "running", "researching", "delegating", "planning", "tool"].compactMap(boardActivity)
+        + [boardTitle, boardWaiting, boardWorking, boardReview, boardDone, boardEmpty, boardFailed,
+         boardTitleMissing, boardOpenFailed, boardOpenHelp, boardAlertTitle, boardUploadFailed,
+         boardAlertBody("x"), boardSince(minutes: 0), boardSince(minutes: 5), boardSince(minutes: 90)]
+    }
+
+    // "주식 종목 분석 세션이 10분 넘게 답을 기다리고 있어요"
+    public func boardAlertBody(_ title: String) -> String {
+        pick("\(title) 세션이 10분 넘게 답을 기다리고 있어요", "\(title) has been waiting for over 10 minutes")
+    }
+
+    // "방금", "5분 전", "1시간 전" / "now", "5m ago", "1h ago"
+    public func boardSince(minutes: Int) -> String {
+        let value = max(0, minutes)
+        if value < 1 { return pick("방금", "now") }
+        if value < 60 { return pick("\(value)분 전", "\(value)m ago") }
+        return pick("\(value / 60)시간 전", "\(value / 60)h ago")
+    }
 }

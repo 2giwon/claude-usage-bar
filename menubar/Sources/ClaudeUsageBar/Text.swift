@@ -29,6 +29,11 @@ enum Words {
         strings.updated(minutesAgo: Int(now.timeIntervalSince(date) / 60), isStale: isStale)
     }
 
+    // 세션 현황판: "방금", "5분 전" / "now", "5m ago"
+    static func since(_ date: Date, now: Date) -> String {
+        strings.boardSince(minutes: Int(now.timeIntervalSince(date) / 60))
+    }
+
     // "1M 중 198K" / "198K of 1M"
     static func tokens(_ used: Int, of window: Int) -> String {
         strings.tokens(used: short(used), of: short(window))

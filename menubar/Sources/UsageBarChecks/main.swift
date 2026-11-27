@@ -282,5 +282,242 @@ check("M7. 결과 파일 모양: current, installed, last(theme, result, reason,
           && last?["requestedAt"] as? String == "2026-11-26T10:00:00.000Z")
 check("M7. 웹이 쓰는 결과 파일을 다시 읽는다", decodeThemeStatus(encoded) == s2)
 
+// ===== 세션 현황판 =====
+
+func hook(_ json: String) -> HookInput? { decodeHookInput(Data(json.utf8)) }
+
+// S1. 훅 입력 읽기
+let prompt = hook(#"{"session_id":"65d11044-228f-4b25","hook_event_name":"UserPromptSubmit","cwd":"/Users/me/app","transcript_path":"/Users/me/.claude/projects/x/65d11044.jsonl","prompt":"hi"}"#)
+check("S1. 세션 번호, 이벤트, 폴더, 기록 경로를 읽는다",
+      prompt?.sessionId == "65d11044-228f-4b25" && prompt?.event == "UserPromptSubmit"
+          && prompt?.cwd == "/Users/me/app" && prompt?.transcriptPath == "/Users/me/.claude/projects/x/65d11044.jsonl")
+check("S1. 알림 종류와 도구 이름을 읽는다",
+      hook(#"{"session_id":"a","hook_event_name":"Notification","notification_type":"permission_prompt"}"#)?.notificationType == "permission_prompt"
+          && hook(#"{"session_id":"a","hook_event_name":"PreToolUse","tool_name":"AskUserQuestion"}"#)?.toolName == "AskUserQuestion")
+check("S1. 깨진 JSON, 세션 번호 없음은 실패(nil)",
+      hook("{ nope") == nil && hook(#"{"hook_event_name":"Stop"}"#) == nil)
+check("S1. 파일 이름으로 못 쓰는 세션 번호(../ 등)는 실패(nil)",
+      hook(#"{"session_id":"../../etc","hook_event_name":"Stop"}"#) == nil
+          && hook(#"{"session_id":"a/b","hook_event_name":"Stop"}"#) == nil)
+
+// S2. 이벤트별 상태
+func action(_ event: String, tool: String? = nil, notification: String? = nil) -> HookAction {
+    hookAction(HookInput(sessionId: "a", event: event, cwd: nil, transcriptPath: nil,
+                         notificationType: notification, toolName: tool))
+}
+check("S2. 질문 입력 -> 일하는 중", action("UserPromptSubmit") == .set(.working))
+check("S2. 질문 도구 전 -> 답 기다림, 질문 도구 뒤 -> 일하는 중",
+      action("PreToolUse", tool: "AskUserQuestion") == .set(.waiting)
+          && action("PostToolUse", tool: "AskUserQuestion") == .set(.working))
+check("M4. 다른 도구 호출 전 -> 일하는 중(하는 일은 따로 기록)", action("PreToolUse", tool: "Bash") == .set(.working))
+check("M4. 다른 도구 호출 뒤는 바꾸지 않는다", action("PostToolUse", tool: "Bash") == .ignore)
+check("M4. 도구 이름 -> 하는 일",
+      activityFor(tool: "Read") == "reading" && activityFor(tool: "Grep") == "reading" && activityFor(tool: "Glob") == "reading"
+          && activityFor(tool: "Edit") == "editing" && activityFor(tool: "Write") == "editing" && activityFor(tool: "NotebookEdit") == "editing"
+          && activityFor(tool: "Bash") == "running" && activityFor(tool: "WebFetch") == "researching" && activityFor(tool: "WebSearch") == "researching"
+          && activityFor(tool: "Agent") == "delegating" && activityFor(tool: "Task") == "delegating"
+          && activityFor(tool: "TodoWrite") == "planning" && activityFor(tool: "mcp__ccd_turn__update_plan") == "planning"
+          && activityFor(tool: "mcp__github__get_me") == "tool" && activityFor(tool: nil) == nil)
+check("M4. 상태 파일에 하는 일이 남고 다시 읽힌다",
+      decodeSessionStatus(encodeSessionStatus(SessionStatus(sessionId: "x", state: .working, cwd: nil, transcriptPath: nil,
+                                                            updatedAt: date("2026-11-27T00:00:00Z"), activity: "editing")))?.activity == "editing")
+check("S2. 권한 요청, 입력 요청 알림 -> 답 기다림",
+      action("Notification", notification: "permission_prompt") == .set(.waiting)
+          && action("Notification", notification: "elicitation_dialog") == .set(.waiting))
+check("S2. 그 밖 알림은 바꾸지 않는다",
+      action("Notification", notification: "idle_prompt") == .ignore && action("Notification") == .ignore)
+check("S2. 응답 끝 -> 쉬는 중, 세션 끝 -> 지우기",
+      action("Stop") == .set(.idle) && action("SessionEnd") == .remove)
+check("S2. 모르는 이벤트(SessionStart 등)는 바꾸지 않는다", action("SessionStart") == .ignore)
+
+// 상태 파일 쓰고 다시 읽기
+let statusAt = date("2026-11-27T00:00:00Z")
+let sampleStatus = SessionStatus(sessionId: "cli-1", state: .waiting, cwd: "/Users/me/app",
+                                 transcriptPath: "/t/cli-1.jsonl", updatedAt: statusAt)
+check("상태 파일: 쓴 값을 그대로 다시 읽는다", decodeSessionStatus(encodeSessionStatus(sampleStatus)) == sampleStatus)
+check("상태 파일: 깨진 파일은 nil", decodeSessionStatus(Data("{".utf8)) == nil)
+
+// S3. 앱 세션 파일 읽기 (모르는 칸이 많아도 읽는다)
+let appJSON = #"""
+{"sessionId":"local_1c7745ae-f76e-4ba3-bcf6-b2ed17c45ac1","cliSessionId":"cli-new","cwd":"/Users/me/app",
+ "title":"세션 현황판","isArchived":false,"lastActivityAt":1795736643221,"lastAssistantUuid":"u2",
+ "lastAssistantCliSessionId":"cli-old","postTurnSummaryFor":"u2",
+ "postTurnSummary":{"status_category":"blocked","status_detail":"커밋 여부 대기","needs_action":""},
+ "remoteMcpServersConfig":[{"uuid":"x","tools":[]}],"unknownField":{"a":[1,2,3]}}
+"""#
+let app = decodeAppSession(Data(appJSON.utf8))
+check("S3. 번호, 제목, 보관 여부, 폴더를 읽는다",
+      app?.localId == "local_1c7745ae-f76e-4ba3-bcf6-b2ed17c45ac1" && app?.title == "세션 현황판"
+          && app?.isArchived == false && app?.cwd == "/Users/me/app")
+check("S3. CLI 번호 두 개를 읽는다", Set(app?.cliIds ?? []) == ["cli-new", "cli-old"])
+check("S3. 요약 종류, 설명, 지금 턴 요약인지를 읽는다",
+      app?.summaryCategory == "blocked" && app?.summaryDetail == "커밋 여부 대기" && app?.isSummaryCurrent == true)
+check("S3. sessionId 가 없거나 local_ 모양이 아니면 nil",
+      decodeAppSession(Data(#"{"title":"x"}"#.utf8)) == nil
+          && decodeAppSession(Data(#"{"sessionId":"cse_1"}"#.utf8)) == nil)
+
+func appSession(_ id: String, cli: [String], title: String? = "제목", archived: Bool = false,
+                category: String? = nil, current: Bool = true, cwd: String? = "/Users/me/app") -> AppSession {
+    AppSession(localId: "local_\(id)", cliIds: cli, title: title, cwd: cwd, isArchived: archived,
+               summaryCategory: category, summaryDetail: category.map { "설명 \($0)" }, isSummaryCurrent: current)
+}
+func status(_ id: String, _ state: SessionState, minutesAgo: Double, cwd: String? = "/Users/me/app") -> SessionStatus {
+    SessionStatus(sessionId: id, state: state, cwd: cwd, transcriptPath: "/t/\(id).jsonl",
+                  updatedAt: statusAt.addingTimeInterval(-minutesAgo * 60))
+}
+func board(_ statuses: [SessionStatus], _ sessions: [AppSession]?, transcripts: [String: Date] = [:]) -> [BoardRow] {
+    buildBoard(statuses: statuses, sessions: sessions, transcriptModified: transcripts, now: statusAt)
+}
+
+// S4. 제목을 못 읽으면 폴더 이름 + 형식 바뀜 표시
+let noTitle = board([status("c1", .working, minutesAgo: 1)], [appSession("a1", cli: ["c1"], title: nil)])
+check("S4. 제목이 없으면 폴더 이름을 쓰고 형식 바뀜 표시를 붙인다",
+      noTitle.first?.title == "app" && noTitle.first?.isTitleMissing == true)
+let unreadable = board([status("c1", .working, minutesAgo: 1)], nil)
+check("S4. 앱 세션 폴더를 못 읽으면 폴더 이름으로 보이고 링크는 없다",
+      unreadable.count == 1 && unreadable.first?.title == "app" && unreadable.first?.isTitleMissing == true
+          && unreadable.first?.link == nil)
+
+// S5. 바뀐 CLI 번호로도 찾는다
+let viaOld = board([status("cli-old", .working, minutesAgo: 1)], app.map { [$0] } ?? [])
+check("S5. lastAssistantCliSessionId 로만 이어져도 찾는다",
+      viaOld.first?.localId == "local_1c7745ae-f76e-4ba3-bcf6-b2ed17c45ac1" && viaOld.first?.title == "세션 현황판")
+
+// S6. 쉬는 중은 앱 요약으로 나눈다
+func kind(_ category: String?, current: Bool = true) -> BoardKind? {
+    board([status("c1", .idle, minutesAgo: 1)], [appSession("a1", cli: ["c1"], category: category, current: current)]).first?.kind
+}
+check("S6. blocked -> 답 기다림", kind("blocked") == .waiting)
+check("S6. review_ready -> 확인 필요", kind("review_ready") == .review)
+check("S6. completed, 요약 없음 -> 끝남", kind("completed") == .done && kind(nil) == .done)
+check("S6. 지난 턴 요약이면 끝남", kind("blocked", current: false) == .done)
+check("S6. 쉬는 중 줄에는 요약 설명을 붙인다",
+      board([status("c1", .idle, minutesAgo: 1)], [appSession("a1", cli: ["c1"], category: "blocked")]).first?.detail == "설명 blocked")
+check("S6. 일하는 중이면 요약이 blocked 여도 일하는 중", board([status("c1", .working, minutesAgo: 1)],
+      [appSession("a1", cli: ["c1"], category: "blocked")]).first?.kind == .working)
+
+// S7. 답 기다림 뒤 대화 기록이 바뀌면 일하는 중
+let waitRow = status("c1", .waiting, minutesAgo: 5)
+let sessionsC1 = [appSession("a1", cli: ["c1"])]
+check("S7. 기록이 더 늦게 바뀌었으면 일하는 중",
+      board([waitRow], sessionsC1, transcripts: ["c1": statusAt.addingTimeInterval(-60)]).first?.kind == .working)
+check("S7. 기록이 그 전에 바뀌었으면 답 기다림 그대로",
+      board([waitRow], sessionsC1, transcripts: ["c1": statusAt.addingTimeInterval(-10 * 60)]).first?.kind == .waiting)
+
+// S8. 거르기
+check("S8. 보관된 세션은 빠진다",
+      board([status("c1", .working, minutesAgo: 1)], [appSession("a1", cli: ["c1"], archived: true)]).isEmpty)
+check("S8. 짝이 없는 세션은 빠진다(앱 세션 폴더는 읽었을 때)",
+      board([status("zz", .working, minutesAgo: 1)], sessionsC1).isEmpty)
+check("S8. 24시간 넘게 쉰 세션은 빠지고, 23시간은 남는다",
+      board([status("c1", .idle, minutesAgo: 24 * 60 + 1)], sessionsC1).isEmpty
+          && board([status("c1", .idle, minutesAgo: 23 * 60)], sessionsC1).count == 1)
+
+check("S8. 한 세션의 최신 상태가 24시간 넘게 쉬었으면, 더 오래된 다른 번호의 상태가 살아나지 않는다(codex P2)",
+      board([status("c-new", .idle, minutesAgo: 25 * 60), status("c-old", .waiting, minutesAgo: 26 * 60)],
+            [appSession("a1", cli: ["c-new", "c-old"])]).isEmpty)
+
+// S9. 순서
+let ordered = board(
+    [status("done", .idle, minutesAgo: 1), status("work", .working, minutesAgo: 9),
+     status("wait", .waiting, minutesAgo: 30), status("rev", .idle, minutesAgo: 2),
+     status("work2", .working, minutesAgo: 2)],
+    [appSession("done", cli: ["done"], category: "completed"), appSession("work", cli: ["work"]),
+     appSession("wait", cli: ["wait"]), appSession("rev", cli: ["rev"], category: "review_ready"),
+     appSession("work2", cli: ["work2"])])
+check("S9. 답 기다림 -> 일하는 중(최근 순) -> 확인 필요 -> 끝남",
+      ordered.map(\.localId) == ["local_wait", "local_work2", "local_work", "local_rev", "local_done"])
+
+// S10. 링크
+check("S10. local_ 번호면 continue 링크",
+      sessionLink("local_1c7745ae-f76e")?.absoluteString == "claude://code/continue?session=local_1c7745ae-f76e")
+check("S10. 이상한 번호면 링크를 만들지 않는다",
+      sessionLink("local_a&b=1") == nil && sessionLink("cse_1") == nil && sessionLink("local_") == nil)
+check("S10. 목록 줄에 링크가 붙는다", ordered.first?.link?.absoluteString == "claude://code/continue?session=local_wait")
+
+// S11. 10분 알림
+// 같은 기다림을 시각만 옮겨 보려고, 기다림 시작 시각은 고정하고 지금 시각을 바꾼다
+func waitingRows(startedMinutesAgo minutes: Double) -> [BoardRow] {
+    board([status("c1", .waiting, minutesAgo: minutes)], [appSession("a1", cli: ["c1"])])
+}
+let tenMinutesAgo = waitingRows(startedMinutesAgo: 10)
+check("S11. 9분 59초면 안 띄운다",
+      alertsDue(tenMinutesAgo, notified: [], now: statusAt.addingTimeInterval(-1)).isEmpty)
+let due = alertsDue(tenMinutesAgo, notified: [], now: statusAt)
+check("S11. 10분이면 띄운다", due.count == 1 && due.first?.row.localId == "local_a1")
+check("S11. 이미 띄운 같은 기다림에는 다시 안 띄운다",
+      !due.isEmpty && alertsDue(tenMinutesAgo, notified: Set(due.map(\.key)), now: statusAt.addingTimeInterval(300)).isEmpty)
+check("S11. 다시 기다리면 새로 센다(시작 시각이 다르면 다른 기다림)",
+      !due.isEmpty && alertsDue(waitingRows(startedMinutesAgo: 12), notified: Set(due.map(\.key)), now: statusAt).count == 1)
+check("S11. 일하는 중은 안 띄운다",
+      alertsDue(board([status("c1", .working, minutesAgo: 30)], sessionsC1), notified: [], now: statusAt).isEmpty)
+
+// S12. 상태 폴더 읽기: 없음 -> 카드 숨김, 비었음 -> 빈 목록
+let boardRoot = FileManager.default.temporaryDirectory.appendingPathComponent("usagebar-board-\(UUID().uuidString)")
+check("S12. 상태 폴더가 없으면 missing(카드 숨김)", readStatusFolder(boardRoot) == .missing)
+try? FileManager.default.createDirectory(at: boardRoot, withIntermediateDirectories: true)
+check("S12. 폴더는 있는데 파일이 없으면 빈 목록", readStatusFolder(boardRoot) == .statuses([]))
+try? encodeSessionStatus(sampleStatus).write(to: boardRoot.appendingPathComponent("cli-1.json"))
+try? Data("{ broken".utf8).write(to: boardRoot.appendingPathComponent("broken.json"))
+try? Data("x".utf8).write(to: boardRoot.appendingPathComponent("cli-1.json.tmp"))
+check("S12. 상태 파일만 읽고 깨진 파일, 임시 파일은 건너뛴다", readStatusFolder(boardRoot) == .statuses([sampleStatus]))
+try? FileManager.default.removeItem(at: boardRoot)
+
+// M4. 일하는 중인 줄에는 하는 일이 붙는다
+func status(_ id: String, _ state: SessionState, minutesAgo: Double, activity: String?) -> SessionStatus {
+    var s = status(id, state, minutesAgo: minutesAgo)
+    s.activity = activity
+    return s
+}
+check("M4. 일하는 중인 줄에 하는 일이 붙고, 쉬는 줄에는 붙지 않는다",
+      board([status("c1", .working, minutesAgo: 1, activity: "editing")], sessionsC1).first?.activity == "editing"
+          && board([status("c1", .idle, minutesAgo: 1, activity: "editing")], sessionsC1).first?.activity == nil)
+
+// M5. 30분 넘게 바뀌지 않은 일하는 중은 버려진 턴으로 보고 끝남
+check("M5. 일하는 중이 31분 그대로면 끝남", board([status("c1", .working, minutesAgo: 31)], sessionsC1).first?.kind == .done)
+check("M5. 29분이면 그대로 일하는 중", board([status("c1", .working, minutesAgo: 29)], sessionsC1).first?.kind == .working)
+check("M5. 상태 파일은 31분 전이어도 대화 기록이 최근에 바뀌었으면 일하는 중",
+      board([status("c1", .working, minutesAgo: 31)], sessionsC1,
+            transcripts: ["c1": statusAt.addingTimeInterval(-5 * 60)]).first?.kind == .working)
+
+// M1. 올릴 내용
+let uploadRows = board([status("c1", .working, minutesAgo: 1, activity: "running")],
+                       [appSession("a1", cli: ["c1"], cwd: "/Users/me/secret-project")])
+let uploadJSON = (try? JSONSerialization.jsonObject(with: encodeBoardUpload(uploadRows))) as? [String: Any]
+let firstUpload = (uploadJSON?["rows"] as? [[String: Any]])?.first
+check("M1. 줄마다 id, 제목, 상태, 하는 일, 시각을 담는다",
+      firstUpload?["id"] as? String == "local_a1" && firstUpload?["title"] as? String == "제목"
+          && firstUpload?["kind"] as? String == "working" && firstUpload?["activity"] as? String == "running"
+          && firstUpload?["since"] as? String == "2026-11-26T23:59:00.000Z" && firstUpload?["titleMissing"] as? Bool == false)
+check("M1. 폴더 경로는 담지 않는다",
+      !(String(data: encodeBoardUpload(uploadRows), encoding: .utf8) ?? "").contains("secret-project"))
+check("M1. 같은 목록이면 같은 내용(바뀔 때만 올리려고)", encodeBoardUpload(uploadRows) == encodeBoardUpload(uploadRows))
+
+// M2. 올릴 때
+let payloadA = Data("a".utf8)
+let payloadB = Data("b".utf8)
+check("M2. 처음이면 올린다", shouldUpload(payloadA, last: nil, now: statusAt))
+let sentOK = UploadAttempt(payload: payloadA, at: statusAt, ok: true)
+check("M2. 목록이 바뀌면 바로 올린다", shouldUpload(payloadB, last: sentOK, now: statusAt.addingTimeInterval(2)))
+check("M2. 같으면 60초 전에는 안 올린다", !shouldUpload(payloadA, last: sentOK, now: statusAt.addingTimeInterval(59)))
+check("M2. 같아도 60초 지나면 올린다", shouldUpload(payloadA, last: sentOK, now: statusAt.addingTimeInterval(60)))
+let sentFail = UploadAttempt(payload: payloadA, at: statusAt, ok: false)
+check("M2. 실패하면 10초 전에는 다시 안 하고, 10초 뒤에 다시", !shouldUpload(payloadB, last: sentFail, now: statusAt.addingTimeInterval(9))
+          && shouldUpload(payloadA, last: sentFail, now: statusAt.addingTimeInterval(10)))
+
+// M3. 설정 파일
+func config(_ json: String) -> BoardConfig? { decodeBoardConfig(Data(json.utf8)) }
+check("M3. https 주소와 열쇠가 있으면 켠다",
+      config(#"{"url":"https://bus-6211.giwon-note.workers.dev/board","key":"k"}"#)?.url.absoluteString
+          == "https://bus-6211.giwon-note.workers.dev/board")
+check("M3. 깨졌거나 https 가 아니거나 열쇠가 비면 끈다",
+      config("{") == nil && config(#"{"url":"http://x.example/board","key":"k"}"#) == nil
+          && config(#"{"url":"https://x.example/board","key":""}"#) == nil && config(#"{"key":"k"}"#) == nil)
+
+check("세션 현황판 문구도 모두 번역돼 있다",
+      !Strings(.korean).boardAll.isEmpty
+          && Strings(.korean).boardAll.count == Strings(.english).boardAll.count
+          && zip(Strings(.korean).boardAll, Strings(.english).boardAll).allSatisfy { $0 != $1 })
+
 print(failures == 0 ? "all checks passed" : "\(failures) check(s) failed")
 exit(failures == 0 ? 0 : 1)
